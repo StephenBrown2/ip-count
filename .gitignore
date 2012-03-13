@@ -1,0 +1,5 @@
+# Ignore backup files created by the operating system
+*~
+
+# Vim creates swapfiles for open files; ignore these
+.*.swp
