@@ -2,50 +2,48 @@
 use strict;
 
 use Socket;
-use Getopt::Long;
+use Getopt::Helpful;
 use File::Basename;
 
 my %o=();
-my ($file, $pattern, $format, $min, $max);
-GetOptions( \%o, 'help|h|?','file|f=s','pattern|p=s','format|l=s','min=i','max=i');
+my ($file, $pattern);
+my $format = 'common';
+my $min = 0;
+my $max = 1_000_000_000_000;
+my $helper = Getopt::Helpful->new(
+    usage => 'CALLER (-f) <filename> [options]',
+    [
+        'f|file=s',\$file,
+        '<filename>',
+        "Required, lists the file you wish to pull the IP hit counts from."
+    ],
+    [
+        'p|pattern=s',\$pattern,
+        '<pattern>',
+        "Optional, limits the results to only lines containing the regex <pattern>.
+        Useful to limit by time like: '02/Aug/2011:21:[12]'. (Slashes are matched)"
+    ],
+    [
+        'l|format=s',\$format,
+        '<format>',
+        "Optional, required if parsing IIS logs. Specify --format=IIS if doing so."
+    ],
+    [
+        'min=i',\$min,
+        '<num>',
+        "Optional, can be used by itself or with --max to narrow results by number of hits."
+    ],
+    [
+        'max=i',\$max,
+        '<num>',
+        "Optional, can be used by itself or with --min to narrow results by number of hits."
+    ],
+    '+help',
+);
 
-if (defined $o{help}) {
-    print "Usage: " . basename($0) . " --file|-f <filename> [--pattern|-p <pattern>] [--format|-l <format>] [--min <min>] [--max <max>]\n\n";
-    print "       --help|-h|-? prints this message and exits.\n\n";
-    print "       <filename>   is required, lists the file you wish to pull the IP hit counts from.\n\n";
-    print "       <pattern>    is optional, but limits the results to only lines containing <pattern>,\n";
-    print "                    a regular expression. Useful to limit by time like: '02/Aug/2011:21:[12]'.\n\n";
-    print "       <format>     is optional, specifying the format of the logfile (common, combined, or IIS).\n\n";
-    print "       <min> and <max> can be used individually or together to narrow the results further,\n";
-    print "                    printing only IPs that have at least <min> hits or no more than <max> hits.\n\n";
-    print "\n      *Note: For larger log files (>100MB) or when your server is currently under high load,\n";
-    print "             it is probably a good idea to grep the log file for the pattern you would enter here,\n";
-    print "             piping the output to a file, and then then run this script on that smaller file.\n\n";
-    exit;
-}
+$helper->Get();
 
-if (defined $o{file}) {
-    $file = $o{file};
-} else {
-    print "Please enter a filename to parse. Use --help or -h for more help.\n";
-    exit;
-}
-
-$pattern = $o{pattern} if defined $o{pattern};
-
-$format = (defined $o{format}) ? $o{format} : 'common';
-
-if (defined $o{min}) {
-    $min = $o{min};
-} else {
-    $min = 0;
-}
-
-if (defined $o{max}) {
-    $max = $o{max};
-} else {
-    $max = 1_000_000_000;
-}
+$file or $file = shift or die "Please enter a filename to parse. Use --help or -h for more help.\n";
 
 my %IPs = ();
 my $total_ips = 0;
