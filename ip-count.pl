@@ -6,16 +6,17 @@ use Getopt::Helpful;
 use File::Basename;
 
 my %o=();
-my ($file, $pattern);
+my (@files, $pattern);
 my $format = 'common';
 my $min = 0;
 my $max = 1_000_000_000_000;
 my $helper = Getopt::Helpful->new(
     usage => 'CALLER (-f) <filename> [options]',
     [
-        'f|file=s',\$file,
+        'f|file=s@',\@files,
         '<filename>',
-        "Required, lists the file you wish to pull the IP hit counts from."
+        "Required, list the file you wish to pull the IP hit counts from.
+        Use multiple times to parse multiple files."
     ],
     [
         'p|pattern=s',\$pattern,
@@ -43,45 +44,65 @@ my $helper = Getopt::Helpful->new(
 
 $helper->Get();
 
-$file or $file = shift or die "Please enter a filename to parse. Use --help or -h for more help.\n";
+@files or $files[0] = shift or die "Please enter a filename to parse. Use --help or -h for more help.\n";
 
 my %IPs = ();
 my $total_ips = 0;
 my $filtered_matched_ips = 0;
+my $grand_total_ips = 0;
+my $grand_matched_ips = 0;
 
-print "\$file is: $file\n" if defined $file;
 print "\$pattern is: $pattern\n" if defined $pattern;
 
-open (FILE, '<', $file) or die "Couldn't open $file : $!";
-print "Reading $file\n";
+foreach my $file (@files) {
+    %IPs = ();
+    $total_ips = 0;
+    $filtered_matched_ips = 0;
 
-while (<FILE>){
-    if (defined $pattern) {
-        next unless m#$pattern#g;
+    open (FILE, '<', $file) or die "Couldn't open $file : $!";
+    print "\nReading file: $file\n\n";
+
+    while (<FILE>){
+        if (defined $pattern) {
+            next unless m#$pattern#g;
+        }
+        if (uc $format eq 'IIS') {
+            chomp;
+            next if /^#/; # Skip commented headers in IIS logs
+            my %r = &parse_iis_line_to_hash($_);
+            $IPs{$r{c_ip}}++;
+        } else {
+            chomp;
+            my %r = &parse_apache_line_to_hash($_);
+            $IPs{$r{client}}++;
+        }
+
+        $total_ips++;
     }
-    if (uc $format eq 'IIS') {
-        chomp;
-        next if /^#/; # Skip commented headers in IIS logs
-        my %r = &parse_iis_line_to_hash($_);
-        $IPs{$r{c_ip}}++;
-    } else {
-        chomp;
-        my %r = &parse_apache_line_to_hash($_);
-        $IPs{$r{client}}++;
+
+    foreach my $IP (sort { $IPs{$b} <=> $IPs{$a} } keys %IPs) {
+        next if $IPs{$IP} < $min or $IPs{$IP} > $max;
+        my $hostname = &find_ip_hostname($IP);
+        print $IPs{$IP}." hits from $IP ($hostname)\n";
+        $filtered_matched_ips += $IPs{$IP};
     }
 
-    $total_ips++;
-}
+    print "\n";
+    print "$filtered_matched_ips total filtered hits.\n" if ($filtered_matched_ips != $total_ips);
+    print "$total_ips total matched hits.\n";
+    print "---\n";
 
-foreach my $IP (sort { $IPs{$b} <=> $IPs{$a} } keys %IPs) {
-    next if $IPs{$IP} < $min or $IPs{$IP} > $max;
-    my $hostname = &find_ip_hostname($IP);
-    print $IPs{$IP}." hits from $IP ($hostname)\n";
-    $filtered_matched_ips += $IPs{$IP};
-}
+    $grand_total_ips += $total_ips;
+    $grand_matched_ips += $filtered_matched_ips;
 
-print "$filtered_matched_ips total filtered hits.\n" if ($filtered_matched_ips != $total_ips);
-print "$total_ips total matched hits.\n";
+    close (FILE);
+} # END foreach (@files)
+
+if (@files > 1) {
+    print "\n";
+    print "$grand_matched_ips total filtered hits (from all files).\n" if ($grand_matched_ips != $grand_total_ips);
+    print "$grand_total_ips total matched hits (from all files).\n";
+}
 
 sub find_ip_hostname() {
     my $ip = shift;
