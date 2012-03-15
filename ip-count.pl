@@ -9,6 +9,7 @@ my %o=();
 my (@files, @patterns);
 my $format = 'common';
 my ($useragent, $noptr);
+our ($verbose, $debug);
 my $min = 0;
 my $max = 1_000_000_000_000;
 my $helper = Getopt::Helpful->new(
@@ -52,6 +53,8 @@ my $helper = Getopt::Helpful->new(
         "Optional, can be used by itself or with --min to narrow results by number of hits."
     ],
     '+help',
+    '+verbose',
+    '+debug',
 );
 
 $helper->Get();
@@ -74,6 +77,25 @@ foreach my $file (@files) {
     $filtered_matched_ips = 0;
 
     print "\nReading file: $file\n\n";
+
+    if ( $verbose or $debug ) {
+        my $lc = `wc -l < $file`;
+        chomp($lc);
+        print "Parsing $lc lines.\n";
+        print "Using ".scalar @patterns." patterns.\n" if (@patterns > 1);
+        my $parse_time = ($lc / 15_000) * @patterns;
+        my $parse_min = ($parse_time / 60);
+        my $parse_sec = ($parse_time % 60);
+        if ($useragent or $noptr) {
+            printf "%s %.0fm%.3fs\n","Should take about",$parse_min,$parse_sec;
+        } elsif ($parse_min >= 2) {
+            print "This will take a while.";
+            printf " (about %.0fm%.3fs)\n",$parse_min,$parse_sec;
+        } elsif ($parse_min == 1) {
+            print "Shouldn't take too long.";
+            printf " (about %.0fm%.3fs)\n",$parse_min,$parse_sec;
+        }
+    }
 
     foreach my $pattern (@patterns) {
         print "Using pattern: $pattern\n" if $pattern ne '';
