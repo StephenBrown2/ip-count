@@ -71,7 +71,7 @@ foreach my $file (@files) {
     print "\nReading file: $file\n\n";
 
     foreach my $pattern (@patterns) {
-        print "\$Pattern is: $pattern\n" if $pattern ne '';
+        print "Using pattern: $pattern\n" if $pattern ne '';
 
         %IPs = ();
         $total_ips = 0;
@@ -122,9 +122,11 @@ foreach my $file (@files) {
 
     } # END foreach (@patterns)
 
-    print "\n";
-    print "$file_matched_ips total filtered hits (from all patterns).\n" if ($grand_matched_ips != $grand_total_ips);
-    print "$file_total_ips total matched hits (from all patterns).\n";
+    if (@patterns > 1) {
+        print "\n";
+        print "$file_matched_ips total filtered hits (from all patterns).\n" if ($grand_matched_ips != $grand_total_ips);
+        print "$file_total_ips total matched hits (from all patterns).\n";
+    }
 
     $grand_total_ips += $file_total_ips;
     $grand_matched_ips += $file_matched_ips;
