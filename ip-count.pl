@@ -8,7 +8,7 @@ use File::Basename;
 my %o=();
 my (@files, @patterns);
 my $format = 'common';
-my $useragent;
+my ($useragent, $noptr);
 my $min = 0;
 my $max = 1_000_000_000_000;
 my $helper = Getopt::Helpful->new(
@@ -35,6 +35,11 @@ my $helper = Getopt::Helpful->new(
         'u|ua|useragent',\$useragent,
         '',
         "Optional, specify grouping by UserAgent instead of by IP address."
+    ],
+    [
+        'no-ptr',\$noptr,
+        '',
+        "Disable PTR record lookup. Makes parsing faster, but reduces effectivity."
     ],
     [
         'min=i',\$min,
@@ -105,8 +110,8 @@ foreach my $file (@files) {
 
         foreach my $IP (sort { $IPs{$b} <=> $IPs{$a} } keys %IPs) {
             next if $IPs{$IP} < $min or $IPs{$IP} > $max;
-            my $hostname = &find_ip_hostname($IP) unless $useragent;
-            print $IPs{$IP}." hits from $IP"; print $useragent ? "\n" : " ($hostname)\n";
+            my $hostname = &find_ip_hostname($IP) unless ($useragent or $noptr);
+            print $IPs{$IP}." hits from $IP"; ($useragent or $noptr) ? print "\n" : print " ($hostname)\n";
             $filtered_matched_ips += $IPs{$IP};
         }
 
