@@ -6,7 +6,7 @@ use Getopt::Helpful;
 use File::Basename;
 
 my %o=();
-my (@files, $pattern);
+my (@files, @patterns);
 my $format = 'common';
 my $min = 0;
 my $max = 1_000_000_000_000;
@@ -19,10 +19,11 @@ my $helper = Getopt::Helpful->new(
         Use multiple times to parse multiple files."
     ],
     [
-        'p|pattern=s',\$pattern,
+        'p|pattern=s',\@patterns,
         '<pattern>',
         "Optional, limits the results to only lines containing the regex <pattern>.
-        Useful to limit by time like: '02/Aug/2011:21:[12]'. (Slashes are matched)"
+        Useful to limit by time like: '02/Aug/2011:21:[12]'. (Slashes are matched)
+        Use multiple times to specify multiple patterns to parse with."
     ],
     [
         'l|format=s',\$format,
@@ -46,56 +47,77 @@ $helper->Get();
 
 @files or $files[0] = shift or die "Please enter a filename to parse. Use --help or -h for more help.\n";
 
+@patterns or $patterns[0] = '';
+
 my %IPs = ();
 my $total_ips = 0;
 my $filtered_matched_ips = 0;
+my $file_total_ips = 0;
+my $file_matched_ips = 0;
 my $grand_total_ips = 0;
 my $grand_matched_ips = 0;
-
-print "\$pattern is: $pattern\n" if defined $pattern;
 
 foreach my $file (@files) {
     %IPs = ();
     $total_ips = 0;
     $filtered_matched_ips = 0;
 
-    open (FILE, '<', $file) or die "Couldn't open $file : $!";
     print "\nReading file: $file\n\n";
 
-    while (<FILE>){
-        if (defined $pattern) {
-            next unless m#$pattern#g;
-        }
-        if (uc $format eq 'IIS') {
-            chomp;
-            next if /^#/; # Skip commented headers in IIS logs
-            my %r = &parse_iis_line_to_hash($_);
-            $IPs{$r{c_ip}}++;
-        } else {
-            chomp;
-            my %r = &parse_apache_line_to_hash($_);
-            $IPs{$r{client}}++;
+    foreach my $pattern (@patterns) {
+        print "\$Pattern is: $pattern\n" if $pattern ne '';
+
+        %IPs = ();
+        $total_ips = 0;
+        $filtered_matched_ips = 0;
+
+        open (FILE, '<', $file) or die "Couldn't open $file : $!";
+
+        while (<FILE>){
+            if (defined $pattern) {
+                next unless m#$pattern#g;
+            }
+            if (uc $format eq 'IIS') {
+                chomp;
+                next if /^#/; # Skip commented headers in IIS logs
+                my %r = &parse_iis_line_to_hash($_);
+                $IPs{$r{c_ip}}++;
+            } else {
+                chomp;
+                my %r = &parse_apache_line_to_hash($_);
+                $IPs{$r{client}}++;
+            }
+
+            $total_ips++;
+
         }
 
-        $total_ips++;
-    }
+        foreach my $IP (sort { $IPs{$b} <=> $IPs{$a} } keys %IPs) {
+            next if $IPs{$IP} < $min or $IPs{$IP} > $max;
+            my $hostname = &find_ip_hostname($IP);
+            print $IPs{$IP}." hits from $IP ($hostname)\n";
+            $filtered_matched_ips += $IPs{$IP};
+        }
 
-    foreach my $IP (sort { $IPs{$b} <=> $IPs{$a} } keys %IPs) {
-        next if $IPs{$IP} < $min or $IPs{$IP} > $max;
-        my $hostname = &find_ip_hostname($IP);
-        print $IPs{$IP}." hits from $IP ($hostname)\n";
-        $filtered_matched_ips += $IPs{$IP};
-    }
+        close (FILE);
+
+        print "\n";
+        print "$filtered_matched_ips total filtered hits.\n" if ($filtered_matched_ips != $total_ips);
+        print "$total_ips total matched hits.\n";
+        print "---\n";
+
+        $file_total_ips += $total_ips;
+        $file_matched_ips += $filtered_matched_ips;
+
+    } # END foreach (@patterns)
 
     print "\n";
-    print "$filtered_matched_ips total filtered hits.\n" if ($filtered_matched_ips != $total_ips);
-    print "$total_ips total matched hits.\n";
-    print "---\n";
+    print "$file_matched_ips total filtered hits (from all patterns).\n" if ($grand_matched_ips != $grand_total_ips);
+    print "$file_total_ips total matched hits (from all patterns).\n";
 
-    $grand_total_ips += $total_ips;
-    $grand_matched_ips += $filtered_matched_ips;
+    $grand_total_ips += $file_total_ips;
+    $grand_matched_ips += $file_matched_ips;
 
-    close (FILE);
 } # END foreach (@files)
 
 if (@files > 1) {
