@@ -8,6 +8,7 @@ use File::Basename;
 my %o=();
 my (@files, @patterns);
 my $format = 'common';
+my $useragent;
 my $min = 0;
 my $max = 1_000_000_000_000;
 my $helper = Getopt::Helpful->new(
@@ -29,6 +30,11 @@ my $helper = Getopt::Helpful->new(
         'l|format=s',\$format,
         '<format>',
         "Optional, required if parsing IIS logs. Specify --format=IIS if doing so."
+    ],
+    [
+        'u|ua|useragent',\$useragent,
+        '',
+        "Optional, specify grouping by UserAgent instead of by IP address."
     ],
     [
         'min=i',\$min,
@@ -81,11 +87,16 @@ foreach my $file (@files) {
                 chomp;
                 next if /^#/; # Skip commented headers in IIS logs
                 my %r = &parse_iis_line_to_hash($_);
-                $IPs{$r{c_ip}}++;
+                defined $useragent ? $IPs{$r{c_ua}}++ : $IPs{$r{c_ip}}++;
             } else {
                 chomp;
                 my %r = &parse_apache_line_to_hash($_);
-                $IPs{$r{client}}++;
+                if ( defined $useragent ) {
+                    die "No UserAgent string found in file.\n" unless $r{agent};
+                    $IPs{$r{agent}}++;
+                } else {
+                    $IPs{$r{client}}++;
+                }
             }
 
             $total_ips++;
@@ -94,8 +105,8 @@ foreach my $file (@files) {
 
         foreach my $IP (sort { $IPs{$b} <=> $IPs{$a} } keys %IPs) {
             next if $IPs{$IP} < $min or $IPs{$IP} > $max;
-            my $hostname = &find_ip_hostname($IP);
-            print $IPs{$IP}." hits from $IP ($hostname)\n";
+            my $hostname = &find_ip_hostname($IP) unless $useragent;
+            print $IPs{$IP}." hits from $IP"; print $useragent ? "\n" : " ($hostname)\n";
             $filtered_matched_ips += $IPs{$IP};
         }
 
@@ -178,7 +189,7 @@ sub parse_apache_line_to_hash() {
     defined($log{$_}) or $log{$_} = '' for('file', 'params');
     $log{params} =~ s/\\"/"/g;
 
-    (!defined($log{$_}) or ($log{$_} eq '-')) and $log{$_} = ''
+    (!defined($log{$_}) or ($log{$_} eq '-')) and $log{$_} = '[UNKNOWN]'
       for('ruser', 'login', 'request', 'code', 'refer', 'agent');
     $log{bytes} = 0 if($log{bytes} eq '-');
 
